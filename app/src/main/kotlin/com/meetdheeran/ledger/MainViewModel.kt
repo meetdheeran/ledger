@@ -9,6 +9,7 @@ import com.meetdheeran.ledger.data.Category
 import com.meetdheeran.ledger.data.LedgerDb
 import com.meetdheeran.ledger.data.MerchantRule
 import com.meetdheeran.ledger.data.Txn
+import com.meetdheeran.ledger.debug.SampleMessages
 import com.meetdheeran.ledger.sms.SmsImporter
 import com.meetdheeran.ledger.ui.monthBounds
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -126,6 +127,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun dismissImportNote() { _lastImport.value = null }
+
+    /**
+     * Debug builds only. Feeds invented bank messages straight into the importer
+     * so the pipeline can be tested on a phone with no SIM. Idempotent like any
+     * other import, so tapping it twice changes nothing.
+     */
+    fun loadSamples() {
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val messages = SampleMessages.all.map {
+                SmsImporter.Message(now - it.daysAgo * 86_400_000L, it.sender, it.body)
+            }
+            _lastImport.value = SmsImporter.ingestAll(getApplication(), messages)
+        }
+    }
 
     /**
      * Re-categorising applies to every past transaction of that merchant and is

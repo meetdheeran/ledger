@@ -124,6 +124,32 @@ class SmsParserTest {
     }
 
     @Test
+    fun `a domain merchant keeps its dots`() {
+        // Found on device 2026-09-22: the dot was treated as a terminator, so
+        // APPLE.COM/BILL became APPLE and no longer matched its category rule.
+        assertEquals(
+            "APPLE.COM/BILL",
+            txn("Your Card ending 4471 has been used for USD 19.99 at APPLE.COM/BILL on 12/09/2026").merchant
+        )
+        assertEquals(
+            "NOON.COM",
+            txn("Your Card ending 4471 has been used for AED 310.00 at NOON.COM on 15/09/2026").merchant
+        )
+    }
+
+    @Test
+    fun `a sentence-ending dot still ends the merchant`() {
+        assertEquals(
+            "TALABAT",
+            txn("Dear Customer, AED 99.50 has been debited from your Card XXXX4471 at TALABAT.").merchant
+        )
+        assertEquals(
+            "CARREFOUR",
+            txn("AED 60.00 debited from Card ending 4471 at CARREFOUR. Your balance is AED 900.00").merchant
+        )
+    }
+
+    @Test
     fun `foreign currency is carried through`() {
         val p = txn("Your Card ending 1234 has been used for USD 19.99 at APPLE.COM on 12/09/2026")
         assertEquals("USD", p.currency)

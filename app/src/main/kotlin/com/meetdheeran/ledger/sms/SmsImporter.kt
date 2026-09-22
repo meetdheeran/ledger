@@ -94,6 +94,33 @@ object SmsImporter {
             r is Ingested.Transaction && r.newCard
         }
 
+    /** A message from somewhere other than the SMS provider. */
+    data class Message(val timestamp: Long, val sender: String, val body: String)
+
+    /**
+     * Imports messages handed in directly rather than read from the inbox.
+     * Used by the debug sample loader, so the parser, the card detection and the
+     * dashboard can all be exercised on a phone with no SIM in it.
+     */
+    suspend fun ingestAll(context: Context, messages: List<Message>): Result =
+        withContext(Dispatchers.IO) {
+            val db = LedgerDb.get(context)
+            val rules = Rules.load(context)
+            val userRules = db.dao().allMerchantRules().associate { it.merchantKey to it.category }
+
+            var txns = 0
+            var unreadable = 0
+            var newCards = 0
+            messages.forEach { m ->
+                when (val r = ingest(context, m.timestamp, m.sender, m.body, rules, userRules)) {
+                    is Ingested.Transaction -> { txns++; if (r.newCard) newCards++ }
+                    Ingested.Unreadable -> unreadable++
+                    Ingested.Skipped -> Unit
+                }
+            }
+            Result(messages.size, txns, unreadable, newCards)
+        }
+
     private sealed interface Ingested {
         data class Transaction(val newCard: Boolean) : Ingested
         data object Unreadable : Ingested

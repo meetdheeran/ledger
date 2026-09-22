@@ -80,13 +80,17 @@ object SmsParser {
         Regex("""(?i)(?:card|a/c|acct)\s*[:\s]\s*(\d{4})\b""")
     )
 
+    // A dot is allowed inside a merchant name and only ends it when a space or
+    // the end of the message follows. Online merchants here are mostly domains
+    // - NOON.COM, APPLE.COM/BILL, AMAZON.AE - and cutting at the first dot both
+    // mangles the name and loses the category match that depends on it.
     private val MERCHANT_AT = Regex(
-        """\bat\s+([^.,;:\n]{2,60}?)(?=\s+(?:on|dated|avl|avbl|available|bal|balance|ref|txn|trx|using|with|card)\b|[.,;:\n]|\z)""",
+        """\bat\s+([^,;:\n]{2,60}?)(?=\s+(?:on|dated|avl|avbl|available|bal|balance|ref|txn|trx|using|with|card)\b|[,;:\n]|\.(?:\s|\z)|\z)""",
         RegexOption.IGNORE_CASE
     )
 
     private val MERCHANT_TO = Regex(
-        """\b(?:to|towards)\s+([^.,;:\n]{2,60}?)(?=\s+(?:on|dated|avl|avbl|available|bal|balance|ref|txn|trx|using|with|card|from)\b|[.,;:\n]|\z)""",
+        """\b(?:to|towards)\s+([^,;:\n]{2,60}?)(?=\s+(?:on|dated|avl|avbl|available|bal|balance|ref|txn|trx|using|with|card|from)\b|[,;:\n]|\.(?:\s|\z)|\z)""",
         RegexOption.IGNORE_CASE
     )
 

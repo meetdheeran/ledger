@@ -39,6 +39,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.meetdheeran.ledger.BuildConfig
 import com.meetdheeran.ledger.MainViewModel
 import com.meetdheeran.ledger.data.Card
 import com.meetdheeran.ledger.data.Category
@@ -205,6 +206,10 @@ private fun DashboardTab(vm: MainViewModel) {
                             "here — pull Rescan above once a message has arrived."
                     )
                 }
+                if (BuildConfig.DEBUG) {
+                    Spacer(Modifier.height(12.dp))
+                    DebugSampleButton(vm)
+                }
             }
         } else {
             items(recent, key = { it.id }) { txn ->
@@ -329,6 +334,13 @@ private fun UnparsedTab(vm: MainViewModel) {
             Spacer(Modifier.height(20.dp))
         }
 
+        if (BuildConfig.DEBUG) {
+            item {
+                DebugSampleButton(vm)
+                Spacer(Modifier.height(18.dp))
+            }
+        }
+
         if (items.isEmpty()) {
             item { Panel { EmptyNote("Nothing unread. Every bank message so far has been understood.") } }
         } else {
@@ -351,6 +363,32 @@ private fun UnparsedTab(vm: MainViewModel) {
                 }
             }
         }
+    }
+}
+
+// ---- debug -----------------------------------------------------------------
+
+/**
+ * Debug builds only. A phone with no SIM has no bank messages, so there is
+ * nothing for the parser to work on and no way to see whether any of this is
+ * right. This feeds invented messages through the real importer - same parser,
+ * same card detection, same dashboard - so the pipeline is testable at all.
+ */
+@Composable
+private fun DebugSampleButton(vm: MainViewModel) {
+    Panel {
+        Text("Debug build", color = Ink.warn, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "No bank messages on this phone. Load invented ones to exercise the parser, " +
+                "card detection and the dashboard for real. Safe to tap twice — importing " +
+                "the same message again does nothing.",
+            color = Ink.muted,
+            fontSize = 13.sp,
+            lineHeight = 19.sp
+        )
+        Spacer(Modifier.height(12.dp))
+        PrimaryButton("Load sample messages") { vm.loadSamples() }
     }
 }
 
