@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Three ledger lines of decreasing length: a record being kept, readable at
+     small sizes without any detail that turns to mush. Drawn inside the 72dp
+     adaptive-icon safe zone (18..90 of the 108 viewport). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:fillColor="#5FD9A6"
+        android:pathData="M30,38 h48 a5,5 0 0 1 0,10 h-48 a5,5 0 0 1 0,-10 z" />
+    <path
+        android:fillColor="#5FD9A6"
+        android:fillAlpha="0.72"
+        android:pathData="M30,54 h34 a5,5 0 0 1 0,10 h-34 a5,5 0 0 1 0,-10 z" />
+    <path
+        android:fillColor="#5FD9A6"
+        android:fillAlpha="0.44"
+        android:pathData="M30,70 h20 a5,5 0 0 1 0,10 h-20 a5,5 0 0 1 0,-10 z" />
+</vector>
