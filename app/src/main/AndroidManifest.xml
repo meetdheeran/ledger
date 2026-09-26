@@ -4,6 +4,7 @@
     <!-- Reading the bank messages already on the phone is the entire data source. -->
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
     <!--
       There is deliberately no INTERNET permission. Ledger cannot reach the

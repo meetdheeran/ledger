@@ -9,9 +9,15 @@ import com.meetdheeran.ledger.data.Category
 import com.meetdheeran.ledger.data.LedgerDb
 import com.meetdheeran.ledger.data.MerchantRule
 import com.meetdheeran.ledger.data.Txn
+import com.meetdheeran.ledger.data.TransactionKind
 import com.meetdheeran.ledger.debug.SampleMessages
 import com.meetdheeran.ledger.sms.SmsImporter
-import com.meetdheeran.ledger.ui.monthBounds
+import com.meetdheeran.ledger.sms.Rules
+import com.meetdheeran.ledger.core.ActivityQuery
+import java.time.YearMonth
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -28,6 +34,7 @@ sealed interface Gate {
     data object Ready : Gate
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val db = LedgerDb.get(app)
@@ -43,20 +50,32 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _lastImport = MutableStateFlow<SmsImporter.Result?>(null)
     val lastImport: StateFlow<SmsImporter.Result?> = _lastImport
 
-    private val bounds = monthBounds()
+    private val _month = MutableStateFlow(YearMonth.now())
+    val month: StateFlow<YearMonth> = _month
+    private val _activityQuery = MutableStateFlow(ActivityQuery())
+    val activityQuery: StateFlow<ActivityQuery> = _activityQuery
+    val budget = month.flatMapLatest { Prefs.budget(app, it.toString()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
+    private val _scanning = MutableStateFlow(false)
+    val scanning: StateFlow<Boolean> = _scanning
+    private val _scanError = MutableStateFlow<String?>(null)
+    val scanError: StateFlow<String?> = _scanError
+
+    fun changeMonth(delta: Long) {
+        val next = _month.value.plusMonths(delta)
+        if (next <= YearMonth.now()) _month.value = next
+    }
+    fun setActivityQuery(query: ActivityQuery) { _activityQuery.value = query }
+    fun setBudget(amount: Long) {
+        val target = _month.value.toString()
+        viewModelScope.launch { Prefs.setBudget(getApplication(), target, amount) }
+    }
 
     val cards = dao.cards().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val recent = dao.recentTxns().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-    val spendThisMonth = dao.spendBetween(bounds.first, bounds.second)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
-    val incomeThisMonth = dao.incomeBetween(bounds.first, bounds.second)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
-    val byCategory = dao.spendByCategory(bounds.first, bounds.second)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-    val byCard = dao.spendByCard(bounds.first, bounds.second)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val unparsed = dao.unparsed().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val unparsedCount = dao.unparsedCount().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+    val reviewCount = dao.reviewCount().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     init { decideGate(unlocked = false) }
 
@@ -68,7 +87,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 !unlocked -> _gate.value = Gate.Unlock
                 !SmsImporter.hasReadPermission(ctx) -> _gate.value = Gate.NeedPermission
                 !Prefs.backfillDone(ctx) -> runBackfill()
-                else -> _gate.value = Gate.Ready
+                else -> {
+                    _gate.value = Gate.Importing("Updating transaction types")
+                    SmsImporter.repairHistory(ctx)
+                    _gate.value = Gate.Ready
+                }
             }
         }
     }
@@ -121,8 +144,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Manual re-scan from the dashboard. Idempotent, so it can be tapped freely. */
     fun rescan() {
+        if (_scanning.value) return
+        _scanning.value = true
+        _scanError.value = null
         viewModelScope.launch {
-            _lastImport.value = SmsImporter.backfill(getApplication())
+            try {
+                _lastImport.value = SmsImporter.backfill(getApplication())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _scanError.value = "Could not finish the scan. Check SMS permission and try again."
+            } finally {
+                _scanning.value = false
+            }
         }
     }
 
@@ -157,6 +191,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun renameCard(cardId: Long, label: String?) {
         viewModelScope.launch { dao.renameCard(cardId, label?.takeIf { it.isNotBlank() }) }
+    }
+
+    /** Corrections affect this message only, and survive future rescans. */
+    fun classify(txn: Txn, kind: TransactionKind) {
+        viewModelScope.launch { dao.setTxnKind(txn.id, kind, kind.direction ?: txn.direction) }
+    }
+
+    fun addBankSender(sender: String, bank: String) {
+        viewModelScope.launch {
+            Rules.addSender(getApplication(), sender, bank)
+            rescan()
+        }
     }
 
     fun dismissUnparsed(id: Long) {

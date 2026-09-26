@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 /** Spend grouped by card, for the dashboard breakdown. */
@@ -22,6 +23,32 @@ data class CategoryTotal(
 
 @Dao
 interface LedgerDao {
+    @Update
+    suspend fun updateTxn(txn: Txn)
+
+    @Query("SELECT * FROM txns WHERE sourceHash = :hash LIMIT 1")
+    suspend fun findTxn(hash: String): Txn?
+
+    @Query("SELECT * FROM txns WHERE parserVersion < :version")
+    suspend fun outdatedTxns(version: Int): List<Txn>
+
+    @Query("SELECT * FROM unparsed")
+    suspend fun allUnparsed(): List<UnparsedSms>
+
+    @Query("DELETE FROM txns WHERE sourceHash = :hash")
+    suspend fun deleteTxnByHash(hash: String)
+
+    @Query("DELETE FROM unparsed WHERE sourceHash = :hash")
+    suspend fun deleteUnparsedByHash(hash: String)
+
+    @Query("DELETE FROM cards WHERE NOT EXISTS (SELECT 1 FROM txns WHERE txns.bank = cards.bank AND txns.cardLast4 = cards.last4)")
+    suspend fun removeUnreferencedCards()
+
+    @Query("UPDATE txns SET kind = :kind, direction = :direction, classificationOverridden = 1 WHERE id = :id")
+    suspend fun setTxnKind(id: Long, kind: TransactionKind, direction: Direction)
+
+    @Query("SELECT COUNT(*) FROM txns WHERE kind = 'REVIEW'")
+    fun reviewCount(): Flow<Int>
 
     // ---- writes -------------------------------------------------------------
     // IGNORE everywhere: both the backfill and the live receiver can present the
@@ -65,8 +92,8 @@ interface LedgerDao {
 
     // ---- transactions -------------------------------------------------------
 
-    @Query("SELECT * FROM txns ORDER BY timestamp DESC LIMIT :limit")
-    fun recentTxns(limit: Int = 200): Flow<List<Txn>>
+    @Query("SELECT * FROM txns ORDER BY timestamp DESC")
+    fun recentTxns(): Flow<List<Txn>>
 
     @Query("SELECT * FROM txns WHERE cardLast4 = :last4 ORDER BY timestamp DESC")
     fun txnsForCard(last4: String): Flow<List<Txn>>
@@ -74,7 +101,8 @@ interface LedgerDao {
     @Query(
         """
         SELECT COALESCE(SUM(amountMinor), 0) FROM txns
-        WHERE direction = 'DEBIT' AND timestamp >= :from AND timestamp <= :to
+        WHERE kind IN ('PURCHASE', 'BILL_PAYMENT', 'FEE') AND currency = 'AED'
+        AND timestamp >= :from AND timestamp <= :to
         """
     )
     fun spendBetween(from: Long, to: Long): Flow<Long>
@@ -82,7 +110,8 @@ interface LedgerDao {
     @Query(
         """
         SELECT COALESCE(SUM(amountMinor), 0) FROM txns
-        WHERE direction = 'CREDIT' AND timestamp >= :from AND timestamp <= :to
+        WHERE kind IN ('SALARY', 'OTHER_INCOME') AND currency = 'AED'
+        AND timestamp >= :from AND timestamp <= :to
         """
     )
     fun incomeBetween(from: Long, to: Long): Flow<Long>
@@ -93,7 +122,8 @@ interface LedgerDao {
                COALESCE(SUM(amountMinor), 0) AS totalMinor,
                COUNT(*) AS txnCount
         FROM txns
-        WHERE direction = 'DEBIT' AND timestamp >= :from AND timestamp <= :to
+        WHERE kind IN ('PURCHASE', 'BILL_PAYMENT', 'FEE') AND currency = 'AED'
+        AND timestamp >= :from AND timestamp <= :to
         GROUP BY bank, cardLast4
         ORDER BY totalMinor DESC
         """
@@ -104,12 +134,19 @@ interface LedgerDao {
         """
         SELECT category AS category, COALESCE(SUM(amountMinor), 0) AS totalMinor
         FROM txns
-        WHERE direction = 'DEBIT' AND timestamp >= :from AND timestamp <= :to
+        WHERE kind IN ('PURCHASE', 'BILL_PAYMENT', 'FEE') AND currency = 'AED'
+        AND timestamp >= :from AND timestamp <= :to
         GROUP BY category
         ORDER BY totalMinor DESC
         """
     )
     fun spendByCategory(from: Long, to: Long): Flow<List<CategoryTotal>>
+
+    @Query("SELECT COALESCE(SUM(amountMinor), 0) FROM txns WHERE kind = :kind AND currency = 'AED' AND timestamp >= :from AND timestamp <= :to")
+    fun totalByKind(kind: TransactionKind, from: Long, to: Long): Flow<Long>
+
+    @Query("SELECT COUNT(*) FROM txns WHERE currency != 'AED' AND timestamp >= :from AND timestamp <= :to")
+    fun foreignCurrencyCount(from: Long, to: Long): Flow<Int>
 
     @Query("SELECT COUNT(*) FROM txns")
     suspend fun txnCount(): Int

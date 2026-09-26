@@ -1,12 +1,30 @@
 package com.meetdheeran.ledger.data
 
 import androidx.room.Entity
+import androidx.room.ColumnInfo
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.TypeConverter
 
 /** Money moving out of an account, or into it. */
 enum class Direction { DEBIT, CREDIT }
+
+/** Economic purpose is separate from the direction money moved. */
+enum class TransactionKind(val label: String, val direction: Direction? = null) {
+    PURCHASE("Purchase", Direction.DEBIT),
+    BILL_PAYMENT("Bill payment", Direction.DEBIT),
+    FEE("Bank fee", Direction.DEBIT),
+    SALARY("Salary", Direction.CREDIT),
+    TRANSFER_IN("Transfer received", Direction.CREDIT),
+    TRANSFER_OUT("Transfer sent", Direction.DEBIT),
+    CARD_REPAYMENT("Card repayment"),
+    REFUND("Refund / reversal", Direction.CREDIT),
+    CASH_WITHDRAWAL("Cash withdrawal", Direction.DEBIT),
+    OTHER_INCOME("Other income", Direction.CREDIT),
+    REVIEW("Needs review");
+
+    val countsAsSpending: Boolean get() = this in setOf(PURCHASE, BILL_PAYMENT, FEE)
+}
 
 enum class Category(val label: String) {
     FOOD("Food & drink"),
@@ -73,7 +91,10 @@ data class Txn(
     val bank: String,
     val category: Category,
     val balanceMinor: Long? = null,
-    val body: String
+    val body: String,
+    @ColumnInfo(defaultValue = "'REVIEW'") val kind: TransactionKind = TransactionKind.REVIEW,
+    @ColumnInfo(defaultValue = "0") val classificationOverridden: Boolean = false,
+    @ColumnInfo(defaultValue = "0") val parserVersion: Int = 0
 )
 
 /**
@@ -104,6 +125,9 @@ data class UnparsedSms(
 )
 
 class Converters {
+    @TypeConverter fun fromKind(k: TransactionKind): String = k.name
+    @TypeConverter fun toKind(s: String): TransactionKind =
+        runCatching { TransactionKind.valueOf(s) }.getOrDefault(TransactionKind.REVIEW)
     @TypeConverter fun fromDirection(d: Direction): String = d.name
     @TypeConverter fun toDirection(s: String): Direction =
         runCatching { Direction.valueOf(s) }.getOrDefault(Direction.DEBIT)

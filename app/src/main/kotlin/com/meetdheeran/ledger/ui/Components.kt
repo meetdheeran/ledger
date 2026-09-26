@@ -17,6 +17,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -30,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import com.meetdheeran.ledger.data.Category
 import com.meetdheeran.ledger.data.Direction
 import com.meetdheeran.ledger.data.Txn
+import com.meetdheeran.ledger.data.TransactionKind
 
 /**
  * A rounded surface. `content` is last on purpose because it is a slot; every
@@ -89,17 +94,24 @@ fun TxnRow(txn: Txn, onClick: () -> Unit) {
     ) {
         Box(
             Modifier
-                .size(34.dp)
-                .clip(CircleShape)
+                .size(42.dp)
+                .clip(RoundedCornerShape(13.dp))
                 .background(categoryTint(txn.category).copy(alpha = 0.16f)),
             contentAlignment = Alignment.Center
         ) {
-            Box(
-                Modifier
-                    .size(9.dp)
-                    .clip(CircleShape)
-                    .background(categoryTint(txn.category))
-            )
+            Icon(when (txn.category) {
+                Category.FOOD -> Icons.Outlined.Restaurant
+                Category.GROCERIES -> Icons.Outlined.ShoppingBasket
+                Category.TRANSPORT -> Icons.Outlined.DirectionsCar
+                Category.SHOPPING -> Icons.Outlined.ShoppingBag
+                Category.BILLS -> Icons.Outlined.Description
+                Category.CASH -> Icons.Outlined.Payments
+                Category.TRANSFER -> Icons.Outlined.SwapHoriz
+                Category.HEALTH -> Icons.Outlined.LocalHospital
+                Category.ENTERTAINMENT -> Icons.Outlined.Movie
+                Category.INCOME -> Icons.AutoMirrored.Outlined.TrendingUp
+                Category.OTHER -> Icons.Outlined.Category
+            }, contentDescription = null, tint = categoryTint(txn.category), modifier = Modifier.size(21.dp))
         }
         Spacer(Modifier.width(13.dp))
         Column(Modifier.weight(1f)) {
@@ -121,11 +133,15 @@ fun TxnRow(txn: Txn, onClick: () -> Unit) {
                 fontSize = 12.sp,
                 maxLines = 1
             )
+            Text(txn.kind.label + if (txn.classificationOverridden) " · Confirmed" else "",
+                color = if (txn.kind == TransactionKind.REVIEW) Ink.warn else Ink.muted,
+                fontSize = 11.sp)
         }
         Spacer(Modifier.width(10.dp))
         Text(
-            text = (if (isDebit) "-" else "+") + formatMoney(txn.amountMinor, txn.currency, withCurrency = false),
-            color = if (isDebit) Ink.text else Ink.credit,
+            text = (if (txn.kind == TransactionKind.REVIEW) "" else if (isDebit) "-" else "+") +
+                formatMoney(txn.amountMinor, txn.currency, withCurrency = txn.currency != "AED"),
+            color = if (txn.kind == TransactionKind.REVIEW) Ink.warn else if (isDebit) Ink.text else Ink.credit,
             fontSize = 15.sp,
             fontWeight = FontWeight.SemiBold
         )
@@ -171,8 +187,8 @@ fun BarRow(
 @Composable
 fun PrimaryButton(
     text: String,
-    enabled: Boolean = true,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     onClick: () -> Unit
 ) {
     Box(

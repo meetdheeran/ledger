@@ -1,6 +1,7 @@
 package com.meetdheeran.ledger.sms
 
 import com.meetdheeran.ledger.data.Direction
+import com.meetdheeran.ledger.data.TransactionKind
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.security.MessageDigest
@@ -15,6 +16,7 @@ import java.security.MessageDigest
  * `assets/rules.json`.
  */
 object SmsParser {
+    const val VERSION = 2
 
     data class Parsed(
         val amountMinor: Long,
@@ -22,7 +24,8 @@ object SmsParser {
         val direction: Direction,
         val merchant: String?,
         val last4: String?,
-        val balanceMinor: Long?
+        val balanceMinor: Long?,
+        val kind: TransactionKind
     )
 
     sealed interface Outcome {
@@ -62,17 +65,6 @@ object SmsParser {
         """(?i)\b(offer|discount|apply now|click|unsubscribe|promo|congratulations|you have won|prize|eligible for|pre[- ]?approved|upgrade now|interest rate|loan offer|terms and conditions apply)\b"""
     )
 
-    private val DEBIT_WORDS = listOf(
-        "debited", "debit of", "spent", "purchase of", "purchase at", "used for",
-        "withdrawn", "withdrawal", "paid to", "payment of", "charged", "deducted",
-        "sent to", "transferred to", "pos txn", "pos transaction", "has been used"
-    )
-
-    private val CREDIT_WORDS = listOf(
-        "credited", "credit of", "received", "deposit of", "deposited", "refund",
-        "salary", "reversed", "added to", "transferred from", "cashback", "has been reversed"
-    )
-
     private val LAST4_PATTERNS = listOf(
         Regex("""(?i)ending\s+(?:with\s+|in\s+)?[*xX#\s]*(\d{4})"""),
         Regex("""(?i)(?:card|account|a/c|acct)\s*(?:no\.?|number|#)?\s*[:\s]*[*xX#]{2,}\s*(\d{4})"""),
@@ -95,15 +87,19 @@ object SmsParser {
     )
 
     /** An amount found in the text, with where it was found. */
-    private data class Found(val value: BigDecimal, val currency: String, val at: Int)
+    private data class Found(val value: BigDecimal, val currency: String, val at: Int, val end: Int)
 
-    fun classify(body: String): Outcome {
+    fun classify(rawBody: String): Outcome {
+        val body = normaliseMoney(rawBody)
         if (OTP.containsMatchIn(body)) return Outcome.Ignore
+        if (TransactionClassifier.isNonPosting(body)) return Outcome.Ignore
 
         val amounts = findAmounts(body)
         val txnAmount = amounts.firstOrNull { !isBalanceContext(body, it.at) }
         val balance = amounts.firstOrNull { isBalanceContext(body, it.at) }
-        val direction = directionOf(body)
+        val merchant = merchantOf(body)
+        val decision = TransactionClassifier.classify(body, merchant)
+        val direction = decision?.direction
 
         if (direction == null && txnAmount == null) return Outcome.Ignore
         if (direction == null) {
@@ -121,28 +117,43 @@ object SmsParser {
                 amountMinor = minor,
                 currency = txnAmount.currency,
                 direction = direction,
-                merchant = merchantOf(body, direction),
-                last4 = last4Of(body),
-                balanceMinor = balance?.value?.toMinor()
+                merchant = merchant ?: decision.kind.label,
+                last4 = cardLast4Of(body),
+                balanceMinor = balance?.value?.toMinor(),
+                kind = if (amounts.count { !isBalanceContext(body, it.at) } > 1)
+                    TransactionKind.REVIEW else decision.kind
             )
         )
     }
 
     // ---- pieces -------------------------------------------------------------
 
+    /** Currency and digit variants can still be routed to review if wording is unknown. */
+    private fun normaliseMoney(body: String): String = body.map { c ->
+        when {
+            c in '٠'..'٩' -> '0' + (c - '٠')
+            c in '۰'..'۹' -> '0' + (c - '۰')
+            c == '٫' -> '.'
+            c == '٬' -> ','
+            else -> c
+        }
+    }.joinToString("")
+        .replace(Regex("""(?i)\b(?:dhs|dirhams?)\b\.?"""), "AED ")
+        .replace(Regex("""د\.?\s*إ\.?|درهم(?:اً|ا)?"""), " AED ")
+
     private fun findAmounts(body: String): List<Found> {
         val out = mutableListOf<Found>()
         AMOUNT_CODE_FIRST.findAll(body).forEach { m ->
             parseDecimal(m.groupValues[2])?.let {
-                out += Found(it, m.groupValues[1].uppercase(), m.range.first)
+                out += Found(it, m.groupValues[1].uppercase(), m.range.first, m.range.last)
             }
         }
         AMOUNT_CODE_LAST.findAll(body).forEach { m ->
             // Skip anything the first pattern already covered, so "AED 100 AED"
             // style overlaps are not counted twice.
-            if (out.none { kotlin.math.abs(it.at - m.range.first) < 24 }) {
+            if (out.none { it.at <= m.range.last && m.range.first <= it.end }) {
                 parseDecimal(m.groupValues[1])?.let {
-                    out += Found(it, m.groupValues[2].uppercase(), m.range.first)
+                    out += Found(it, m.groupValues[2].uppercase(), m.range.first, m.range.last)
                 }
             }
         }
@@ -157,41 +168,21 @@ object SmsParser {
     private fun isBalanceContext(body: String, at: Int): Boolean {
         val from = (at - 34).coerceAtLeast(0)
         val prefix = body.substring(from, at).lowercase()
-        return prefix.contains("bal") || prefix.contains("limit") || prefix.contains("outstanding")
+        return Regex("""\b(?:balance|bal|limit|outstanding|available credit)(?:\s+(?:is|of|amount|credit))?\s*[:=.-]?\s*$""").containsMatchIn(prefix)
     }
 
-    /**
-     * Debit or credit. "Credit card" and "debit card" are stripped first: the
-     * word "credit" in a card's name has nothing to do with which way the money
-     * went, and treating it as a signal turns every card purchase into income.
-     */
-    private fun directionOf(body: String): Direction? {
-        val b = body.lowercase()
-            .replace("credit card", " ")
-            .replace("creditcard", " ")
-            .replace("credit limit", " ")
-            .replace("debit card", " ")
-            .replace("debitcard", " ")
-
-        val debitAt = DEBIT_WORDS.mapNotNull { w -> b.indexOf(w).takeIf { it >= 0 } }.minOrNull()
-        val creditAt = CREDIT_WORDS.mapNotNull { w -> b.indexOf(w).takeIf { it >= 0 } }.minOrNull()
-
-        return when {
-            debitAt != null && creditAt != null -> if (debitAt <= creditAt) Direction.DEBIT else Direction.CREDIT
-            debitAt != null -> Direction.DEBIT
-            creditAt != null -> Direction.CREDIT
-            else -> null
-        }
-    }
-
-    private fun last4Of(body: String): String? {
+    private fun cardLast4Of(body: String): String? {
+        // Account suffixes must never create phantom cards. Search only the
+        // short card clause, stopping before another account or money amount.
+        val cardClause = Regex("""(?i)\bcard\b[^.;,\n]{0,65}""").find(body)?.value ?: return null
+        val scope = cardClause.split(Regex("""(?i)\b(?:account|a/c|AED|USD|EUR|GBP)\b"""), limit = 2)[0]
         for (p in LAST4_PATTERNS) {
-            p.find(body)?.groupValues?.getOrNull(1)?.let { if (it.length == 4) return it }
+            p.find(scope)?.groupValues?.getOrNull(1)?.let { if (it.length == 4) return it }
         }
         return null
     }
 
-    private fun merchantOf(body: String, direction: Direction): String? {
+    private fun merchantOf(body: String): String? {
         val candidates = listOfNotNull(
             MERCHANT_AT.find(body)?.groupValues?.getOrNull(1),
             MERCHANT_TO.find(body)?.groupValues?.getOrNull(1)
@@ -205,7 +196,6 @@ object SmsParser {
         return when {
             b.contains("atm") || b.contains("cash withdrawal") -> "ATM"
             b.contains("salary") || b.contains("payroll") -> "Salary"
-            direction == Direction.CREDIT -> "Credit"
             else -> null
         }
     }

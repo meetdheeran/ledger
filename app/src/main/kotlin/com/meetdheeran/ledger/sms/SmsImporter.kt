@@ -5,11 +5,12 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.provider.Telephony
 import androidx.core.content.ContextCompat
+import androidx.room.withTransaction
 import com.meetdheeran.ledger.data.Card
 import com.meetdheeran.ledger.data.Category
-import com.meetdheeran.ledger.data.Direction
 import com.meetdheeran.ledger.data.LedgerDb
 import com.meetdheeran.ledger.data.Txn
+import com.meetdheeran.ledger.data.TransactionKind
 import com.meetdheeran.ledger.data.UnparsedSms
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -22,6 +23,22 @@ import kotlinx.coroutines.withContext
  * seen, and the unique source hash means seeing it twice changes nothing.
  */
 object SmsImporter {
+
+    /** Repairs saved history, including messages older than the SMS backfill window. */
+    suspend fun repairHistory(context: Context) = withContext(Dispatchers.IO) {
+        val db = LedgerDb.get(context)
+        val rules = Rules.loadForImport(context)
+        db.withTransaction {
+            val userRules = db.dao().allMerchantRules().associate { it.merchantKey to it.category }
+            db.dao().outdatedTxns(SmsParser.VERSION).forEach { old ->
+                ingest(context, old.timestamp, old.bank, old.body, rules, userRules, old.sourceHash, old.bank)
+            }
+            db.dao().allUnparsed().forEach { old ->
+                ingest(context, old.timestamp, old.sender, old.body, rules, userRules, old.sourceHash)
+            }
+            db.dao().removeUnreferencedCards()
+        }
+    }
 
     /** Agreed with Dheer: thirty days of history on first run, and again whenever a new card shows up. */
     const val BACKFILL_DAYS = 30
@@ -44,11 +61,12 @@ object SmsImporter {
      */
     suspend fun backfill(context: Context, days: Int = BACKFILL_DAYS): Result =
         withContext(Dispatchers.IO) {
+            repairHistory(context)
             if (!hasReadPermission(context)) return@withContext Result()
 
             val cutoff = System.currentTimeMillis() - days * 24L * 60L * 60L * 1000L
             val db = LedgerDb.get(context)
-            val rules = Rules.load(context)
+            val rules = Rules.loadForImport(context)
             val userRules = db.dao().allMerchantRules().associate { it.merchantKey to it.category }
 
             var scanned = 0
@@ -88,7 +106,7 @@ object SmsImporter {
     suspend fun ingestLive(context: Context, timestamp: Long, sender: String, body: String): Boolean =
         withContext(Dispatchers.IO) {
             val db = LedgerDb.get(context)
-            val rules = Rules.load(context)
+            val rules = Rules.loadForImport(context)
             val userRules = db.dao().allMerchantRules().associate { it.merchantKey to it.category }
             val r = ingest(context, timestamp, sender, body, rules, userRules)
             r is Ingested.Transaction && r.newCard
@@ -105,7 +123,7 @@ object SmsImporter {
     suspend fun ingestAll(context: Context, messages: List<Message>): Result =
         withContext(Dispatchers.IO) {
             val db = LedgerDb.get(context)
-            val rules = Rules.load(context)
+            val rules = Rules.loadForImport(context)
             val userRules = db.dao().allMerchantRules().associate { it.merchantKey to it.category }
 
             var txns = 0
@@ -133,54 +151,75 @@ object SmsImporter {
         sender: String,
         body: String,
         rules: RulesFile,
-        userRules: Map<String, Category>
+        userRules: Map<String, Category>,
+        savedHash: String? = null,
+        savedBank: String? = null
     ): Ingested {
         // Bank messages only, as agreed. Anything from a sender we cannot tie
         // to a bank is not this app's business and is not stored anywhere.
-        val bank = Rules.bankFor(rules, sender, body) ?: return Ingested.Skipped
+        val bank = savedBank ?: Rules.bankFor(rules, sender, body) ?: return Ingested.Skipped
 
-        val dao = LedgerDb.get(context).dao()
-        val hash = SmsParser.sourceHash(timestamp, sender, body)
+        val db = LedgerDb.get(context)
+        val dao = db.dao()
+        val hash = savedHash ?: SmsParser.sourceHash(timestamp, sender, body)
 
-        return when (val outcome = SmsParser.classify(body)) {
-            SmsParser.Outcome.Ignore -> Ingested.Skipped
-
-            SmsParser.Outcome.Unreadable -> {
-                dao.insertUnparsed(
-                    UnparsedSms(sourceHash = hash, timestamp = timestamp, sender = sender, body = body)
-                )
-                Ingested.Unreadable
-            }
-
-            is SmsParser.Outcome.Transaction -> {
-                val p = outcome.parsed
-                val merchant = p.merchant ?: bank
-
-                var newCard = false
-                p.last4?.let { last4 ->
-                    val rowId = dao.insertCard(
-                        Card(bank = bank, last4 = last4, firstSeen = timestamp)
-                    )
-                    // IGNORE returns -1 when the card already existed.
-                    if (rowId != -1L) newCard = true
+        return db.withTransaction {
+            val existing = dao.findTxn(hash)
+            when (val outcome = SmsParser.classify(body)) {
+                SmsParser.Outcome.Ignore -> {
+                    if (existing?.classificationOverridden != true) dao.deleteTxnByHash(hash)
+                    else dao.updateTxn(existing.copy(parserVersion = SmsParser.VERSION))
+                    dao.deleteUnparsedByHash(hash)
+                    Ingested.Skipped
                 }
 
-                dao.insertTxn(
-                    Txn(
-                        sourceHash = hash,
-                        timestamp = timestamp,
-                        amountMinor = p.amountMinor,
-                        currency = p.currency,
-                        direction = p.direction,
-                        merchant = merchant,
-                        cardLast4 = p.last4,
-                        bank = bank,
-                        category = categoryFor(rules, userRules, merchant, p.direction),
-                        balanceMinor = p.balanceMinor,
-                        body = body
+                SmsParser.Outcome.Unreadable -> {
+                    if (existing?.classificationOverridden == true) {
+                        dao.updateTxn(existing.copy(parserVersion = SmsParser.VERSION))
+                        return@withTransaction Ingested.Skipped
+                    }
+                    dao.deleteTxnByHash(hash)
+                    dao.insertUnparsed(
+                        UnparsedSms(sourceHash = hash, timestamp = timestamp, sender = sender, body = body)
                     )
-                )
-                Ingested.Transaction(newCard)
+                    Ingested.Unreadable
+                }
+
+                is SmsParser.Outcome.Transaction -> {
+                    val p = outcome.parsed
+                    val merchant = p.merchant ?: bank
+
+                    var newCard = false
+                    p.last4?.let { last4 ->
+                        val rowId = dao.insertCard(
+                            Card(bank = bank, last4 = last4, firstSeen = timestamp)
+                        )
+                        // IGNORE returns -1 when the card already existed.
+                        if (rowId != -1L) newCard = true
+                    }
+
+                    val txn = Txn(
+                            id = existing?.id ?: 0,
+                            sourceHash = hash,
+                            timestamp = timestamp,
+                            amountMinor = p.amountMinor,
+                            currency = p.currency,
+                            direction = if (existing?.classificationOverridden == true) existing.direction else p.direction,
+                            merchant = merchant,
+                            cardLast4 = p.last4,
+                            bank = bank,
+                            category = existing?.let { userRules[it.merchant.uppercase()] }
+                                ?: categoryFor(rules, userRules, merchant, p.kind),
+                            balanceMinor = p.balanceMinor,
+                            body = body,
+                            kind = if (existing?.classificationOverridden == true) existing.kind else p.kind,
+                            classificationOverridden = existing?.classificationOverridden ?: false,
+                            parserVersion = SmsParser.VERSION
+                        )
+                    if (existing == null) dao.insertTxn(txn) else dao.updateTxn(txn)
+                    dao.deleteUnparsedByHash(hash)
+                    Ingested.Transaction(newCard)
+                }
             }
         }
     }
@@ -193,11 +232,17 @@ object SmsImporter {
         rules: RulesFile,
         userRules: Map<String, Category>,
         merchant: String,
-        direction: Direction
+        kind: TransactionKind
     ): Category {
         userRules[merchant.uppercase()]?.let { return it }
+        when (kind) {
+            TransactionKind.SALARY, TransactionKind.OTHER_INCOME -> return Category.INCOME
+            TransactionKind.TRANSFER_IN, TransactionKind.TRANSFER_OUT, TransactionKind.CARD_REPAYMENT -> return Category.TRANSFER
+            TransactionKind.CASH_WITHDRAWAL -> return Category.CASH
+            else -> Unit
+        }
         val guess = Rules.categoryFor(rules, merchant)
         if (guess != Category.OTHER) return guess
-        return if (direction == Direction.CREDIT) Category.INCOME else Category.OTHER
+        return Category.OTHER
     }
 }

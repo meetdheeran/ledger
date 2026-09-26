@@ -5,8 +5,10 @@ import android.util.Base64
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import java.security.MessageDigest
 import java.security.SecureRandom
 import javax.crypto.SecretKeyFactory
@@ -64,6 +66,14 @@ object Lock {
 }
 
 object Prefs {
+    fun budget(context: Context, month: String) = context.prefsStore.data.map {
+        it[longPreferencesKey("budget_$month")] ?: 0L
+    }
+
+    suspend fun setBudget(context: Context, month: String, amount: Long) {
+        require(amount >= 0)
+        context.prefsStore.edit { it[longPreferencesKey("budget_$month")] = amount }
+    }
 
     private val KEY_BACKFILLED = booleanPreferencesKey("backfill_done")
 

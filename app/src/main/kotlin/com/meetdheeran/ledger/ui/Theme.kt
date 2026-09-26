@@ -5,23 +5,21 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-/**
- * One small palette, used everywhere. True black rather than dark grey: the
- * OnePlus 7 is OLED, so black costs no light and makes the numbers the only
- * bright thing on screen, which is the whole point of the app.
- */
+/** Dark surfaces with mint for spending, blue for trends and violet for cards. */
 object Ink {
-    val bg = Color(0xFF000000)
-    val surface = Color(0xFF111316)
-    val surfaceHigh = Color(0xFF181B1F)
-    val line = Color(0xFF23272C)
+    val bg = Color(0xFF090D13)
+    val surface = Color(0xFF131A24)
+    val surfaceHigh = Color(0xFF1C2634)
+    val line = Color(0xFF2B3848)
     val text = Color(0xFFF1F3F5)
-    val muted = Color(0xFF8B939C)
-    val faint = Color(0xFF5A626A)
+    val muted = Color(0xFFA4B0C0)
+    val faint = Color(0xFF8C9BAE)
     val accent = Color(0xFF5FD9A6)
     val debit = Color(0xFFFF8A7A)
     val credit = Color(0xFF5FD9A6)
     val warn = Color(0xFFE8C06A)
+    val blue = Color(0xFF82B6FF)
+    val purple = Color(0xFFC0A1FF)
 }
 
 private val scheme = darkColorScheme(

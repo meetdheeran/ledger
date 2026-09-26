@@ -4,6 +4,13 @@ import android.content.Context
 import com.meetdheeran.ledger.data.Category
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.flow.first
+
+private val Context.bankSenderStore by preferencesDataStore(name = "bank_senders")
 
 /**
  * The parts of parsing that vary between banks and countries live in
@@ -18,7 +25,8 @@ import kotlinx.serialization.json.Json
 @Serializable
 data class BankRule(
     val name: String,
-    val senders: List<String>
+    val senders: List<String>,
+    val exactSender: Boolean = false
 )
 
 @Serializable
@@ -28,6 +36,29 @@ data class RulesFile(
 )
 
 object Rules {
+    private val senderKey = stringPreferencesKey("custom_senders")
+
+    suspend fun loadForImport(context: Context): RulesFile {
+        val base = load(context)
+        val custom = customSenders(context)
+        return base.copy(banks = custom + base.banks)
+    }
+
+    private suspend fun customSenders(context: Context): List<BankRule> =
+        context.bankSenderStore.data.first()[senderKey]?.let {
+            json.decodeFromString<List<BankRule>>(it)
+        } ?: emptyList()
+
+    /** Explicitly trusted by the user; an exact match never widens to other senders. */
+    suspend fun addSender(context: Context, sender: String, bank: String) {
+        require(normalise(sender).isNotEmpty() && bank.isNotBlank())
+        context.bankSenderStore.edit { prefs ->
+            val current = prefs[senderKey]?.let { json.decodeFromString<List<BankRule>>(it) } ?: emptyList()
+            prefs[senderKey] = json.encodeToString(current.filterNot {
+                it.senders.any { s -> normalise(s) == normalise(sender) }
+            } + BankRule(bank.trim(), listOf(sender.trim()), exactSender = true))
+        }
+    }
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -62,16 +93,17 @@ object Rules {
         val s = normalise(sender)
         if (s.isNotEmpty()) {
             rules.banks.firstOrNull { bank ->
-                bank.senders.any { token ->
+                (!bank.exactSender && s == normalise(bank.name)) || bank.senders.any { token ->
                     val t = normalise(token)
-                    t.isNotEmpty() && s.contains(t)
+                    t.isNotEmpty() && (s == t || (!bank.exactSender &&
+                        s.startsWith(t) && s.removePrefix(t) in setOf("ALERT", "ALERTS", "SMS", "UAE", "BANK")))
                 }
             }?.let { return it.name }
         }
         val b = normalise(body)
         return rules.banks.firstOrNull { bank ->
             val t = normalise(bank.name)
-            t.length >= 3 && b.contains(t)
+            !bank.exactSender && t.length >= 6 && b.contains(t)
         }?.name
     }
 
