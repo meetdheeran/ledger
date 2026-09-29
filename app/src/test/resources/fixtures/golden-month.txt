@@ -1,0 +1,28 @@
+# Golden month: September 2026. Synthetic messages only — no real inbox data.
+# date | bank | expected outcome | SMS body
+# Changing any rule that moves a line below breaks GoldenMonthTest on purpose.
+2026-09-01 | ENBD | PURCHASE | Your Emirates NBD Credit Card ending 1234 has been used for AED 150.00 at CARREFOUR on 01/09/2026. Available credit AED 9,000.00
+2026-09-01 | ENBD | SALARY | Salary of AED 12000.00 credited to your account
+2026-09-02 | ADCB | PURCHASE | Purchase of AED 45.00 at TALABAT with your debit card ending 4321
+2026-09-03 | FAB | PURCHASE | AED 75.00 debited from Card XXXX5555 at NOON.COM.
+2026-09-05 | ADCB | TRANSFER_OUT | AED 2000.00 debited from your account XXXX1234 for transfer to beneficiary. Available balance AED 5000.00
+2026-09-06 | ADCB | TRANSFER_IN | You received AED 100.00 from Ahmed via Aani
+2026-09-07 | ENBD | CARD_REPAYMENT | AED 2500.00 debited from your account for credit card payment
+2026-09-07 | ENBD | CARD_REPAYMENT | Thank you. Payment of AED 2500.00 received towards your credit card ending 1234
+2026-09-08 | FAB | REFUND | AED 50.00 refund credited to your card XXXX5555 from NOON
+2026-09-09 | ADCB | CASH_WITHDRAWAL | AED 500.00 withdrawn from ADCB ATM using Card ending 4321
+2026-09-10 | ENBD | FEE | Annual fee of AED 300.00 charged to your card ending 1234
+2026-09-11 | ADCB | BILL_PAYMENT | AED 420.00 paid to DEWA from your account ending 5678
+2026-09-12 | ENBD | OTHER_INCOME | Interest of AED 20.00 credited to your account
+2026-09-13 | ADCB | REVIEW | Your account has been debited with AED 500.00
+2026-09-14 | FAB | REVIEW | Purchase of USD 20.00 at NOON with card XXXX1234 equivalent AED 74.00
+2026-09-15 | ENBD | PURCHASE | Purchase of Dhs. 100.00 at LULU with card XXXX1234
+2026-09-16 | ADCB | IGNORE | OTP 123456 for purchase of AED 500.00 at IKEA
+2026-09-17 | ADCB | IGNORE | Card purchase of AED 500.00 at IKEA was declined
+2026-09-18 | ENBD | IGNORE | Minimum amount due AED 50.00. Total amount due AED 900.00
+2026-09-19 | ENBD | UNREADABLE | تم خصم ١٠٠٫٠٠ درهم من حسابك
+2026-09-20 | FAB | PURCHASE | Purchase at GLOBAL for AED 100.00 with card XXXX5555. Balance AED 900.00
+2026-09-21 | ENBD | PURCHASE | Purchase of USD 20.00 at AMAZON with card XXXX1234
+2026-09-22 | ADCB | REFUND | Purchase of AED 150.00 at CARREFOUR on card ending 4321 has been reversed
+2026-09-30 | ADCB | PURCHASE | Purchase of AED 60.00 at CARREFOUR with your debit card ending 4321
+2026-08-31 | ENBD | PURCHASE | Purchase of AED 999.00 at IKEA with card XXXX1234

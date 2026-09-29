@@ -94,7 +94,7 @@ python tools/check_storage.py
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Validation includes **43 automated tests** and a SQLite check of the v1 → v2 migration, retained data, spending aggregates, currency exclusions and duplicate constraints. The APK builds successfully; lint reports no errors, with existing dependency/resource warnings.
+Validation includes **47 automated tests**, a golden-month fixture that locks a full synthetic month from SMS text to dashboard totals (so a rule change cannot silently move the spending figure), and a SQLite check of the v1 → v2 migration, retained data, spending aggregates, currency exclusions and duplicate constraints. The APK builds successfully; lint reports no errors, with existing dependency/resource warnings.
 
 ### Reproduce the screenshots
 
