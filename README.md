@@ -1,167 +1,113 @@
 # Ledger
 
-Your spending, read from the bank messages already on your phone.
+**Your money, clearly.** An offline Android spending tracker built around UAE bank SMS.
 
-No bank login. No account aggregator. No server. **No internet permission at all** — the app
-cannot reach the network even if something in it tried to, which makes "nothing leaves your
-phone" a property of the app rather than a promise in a privacy policy.
+[**Download Ledger 1.2.1 APK**](https://github.com/meetdheeran/ledger/releases/download/v1.2.1/Ledger-1.2.1.apk) · [Release notes](https://github.com/meetdheeran/ledger/releases/tag/v1.2.1) · [Report an issue](https://github.com/meetdheeran/ledger/issues)
 
-Built for the UAE first (AED), but the bank-specific parts are data, not code.
+Android 12+ · Kotlin · Jetpack Compose · AED-focused · No internet permission
 
----
+## A clearer picture of your spending
 
-## What it does
+Ledger turns bank messages into searchable activity, card views, budgets and spending insights. Purchases, bills and fees count as spending. Salary, transfers, repayments, refunds and cash withdrawals have separate transaction types. Unclear messages stay out of the spending total until reviewed.
 
-- **Reads the last 30 days** of SMS on first run and builds a record from them.
-- **Bank messages only.** Anything from a sender that cannot be tied to a bank is ignored and
-  never stored anywhere.
-- **Finds your cards by itself.** A card appears the first time it shows up in a message — there
-  is no setup screen asking you to type card numbers. Each card is tracked separately, and you
-  can give it a name.
-- **Sorts merchants into categories** automatically, and remembers your corrections: fix
-  "Carrefour" once and every past and future Carrefour transaction follows.
-- **Keeps up on its own.** New bank messages are picked up as they arrive.
-- **Shows what it could not read.** Bank messages the rules failed on go to an Inbox tab instead
-  of being dropped, so a total is never quietly missing something.
-- **Opens with a password** you set the first time, and locks again whenever you leave the app.
+## Screenshots
 
-## What it deliberately does not do
+Actual app screens captured on a OnePlus 7 using the separate **Ledger Demo** build. All transactions, amounts and card details below are fictional.
 
-- Talk to the network. There is no `INTERNET` permission and no HTTP library in the build.
-- Get backed up. Cloud backup and device-to-device transfer are both excluded, so the database
-  does not travel to a new phone or to Google.
-- Encrypt the database. **This was a choice, not an oversight** — the options were a password
-  screen alone or a password that also encrypts the data, and the screen-only option was taken.
-  Anyone with the phone unlocked and developer access can read the database file directly. If
-  that matters later, it is a real piece of work to retrofit, not a setting.
+<table>
+  <tr>
+    <th>Dashboard & budget</th>
+    <th>Searchable activity</th>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/home.png" width="320" alt="Ledger dark dashboard with fictional spending, income and monthly budget" /></td>
+    <td><img src="docs/screenshots/activity.png" width="320" alt="Ledger activity search and transaction filters with fictional transactions" /></td>
+  </tr>
+  <tr>
+    <th>Spending insights</th>
+    <th>Your cards</th>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/insights.png" width="320" alt="Six-month spending chart using fictional demo amounts" /></td>
+    <td><img src="docs/screenshots/cards.png" width="320" alt="Card activity overview showing fictional demo cards" /></td>
+  </tr>
+</table>
 
-## How the parsing works
+## Install
 
-The *grammar* of a transaction message is general and lives in code
-(`sms/SmsParser.kt`): a currency and an amount, a verb that gives the direction, a masked card,
-a merchant, sometimes a balance. Banks across the UAE say the same things in a slightly
-different order.
+1. [Download the APK](https://github.com/meetdheeran/ledger/releases/download/v1.2.1/Ledger-1.2.1.apk) on an Android 12 or newer phone.
+2. Open it and allow installation from your browser or file manager if Android asks.
+3. Open Ledger, set a password and grant SMS access to import your bank messages.
 
-The parts that actually vary live in **`app/src/main/assets/rules.json`**:
+**Updating an existing installation?** Install over the old app to retain your history. Do not uninstall first. Android requires the same signing key for an in-place update.
 
-- `banks` — which sender IDs belong to which bank. Matching ignores case, spaces and
-  punctuation, so `ENBD-Alert` matches the token `ENBD`.
-- `merchantCategories` — which merchant names map to which category. Longest match wins.
+The release includes the regular app, **not the demo**, plus a SHA-256 checksum. It is a development-signed build for direct installation, not a Play Store release. APKs live in [GitHub Releases](https://github.com/meetdheeran/ledger/releases), keeping the source repository small.
 
-Adding a bank or a merchant is a data change. That is what makes "works for other people's
-banks too" realistic rather than a rewrite.
+## Features
 
-A few details that matter more than they look:
+| View | What you can do |
+| --- | --- |
+| **Home** | See actual spending, income, other money movements and monthly budget progress. |
+| **Activity** | Search by merchant, bank, card or amount. Filter by type, category, currency, card and month, or browse all saved history. |
+| **Insights** | Explore six-month trends, category shares, top merchants, daily spending and your largest expense. |
+| **Cards** | View spending for each detected card, rename it and open its activity. Cards are identified by bank plus card suffix. |
+| **Inbox** | Review unreadable bank messages or register a missing bank's exact SMS sender. |
 
-- **OTP messages are rejected outright.** An OTP for a purchase quotes the amount, so without
-  that check every confirmed payment would be counted twice.
-- **"Credit card" is stripped before deciding direction.** The word "credit" in a card's name
-  says nothing about which way the money went, and treating it as a signal turns every card
-  purchase into income.
-- **Amounts next to "balance" or "limit" are not the transaction.** They are captured separately.
-- **Money is stored in minor units as integers.** Floating point accumulates error the moment
-  you start summing it, which for a spending total is the one thing that must not happen.
-- **Every message has a content-derived hash.** Importing the same SMS twice is a no-op, which
-  is what lets a re-scan run freely.
+- Reads the last **30 days** on first import and rescan; older saved history remains available.
+- Detects cards from SMS and picks up new bank messages as they arrive.
+- Lets you correct a transaction's type; corrections survive rescans.
+- Remembers merchant category corrections for past and future transactions.
+- Keeps separate budgets for each month.
+- Reclassifies saved history when upgrading, without resetting the password or card names.
 
-## Build
+## How totals work
 
-Needs JDK 17 and Android SDK 34. Pinned toolchain, same as Prism — do not bump: newer libraries
-ship Kotlin 2.2 metadata and break this combination.
+Only **purchases, bill payments and bank fees in AED** contribute to spending. Refunds are shown separately rather than deducted from an unrelated month's purchases. Card repayments do not count as a second expense.
 
-```bash
-./gradlew assembleDebug
-```
+Foreign-currency alerts keep their original currency and are excluded from AED totals. Ledger does not assume an exchange rate. OTPs, declined payments and pending/future payment notices do not count. Messages with multiple transaction amounts or uncertain purposes require review.
 
-Install on a connected phone:
+Charts reflect imported SMS, not a complete bank statement. Older months may contain partial history. Duplicate detection recognises the same source message; it does not reconcile different alerts describing the same purchase.
 
-```bash
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
+## Privacy and storage
 
-## Permissions
+- **No bank login, server or internet permission.** Processing happens on the phone.
+- Only messages tied to a recognised or user-added bank sender are imported.
+- A password gates access to the app; it locks when you leave.
+- Cloud backup and device-to-device transfer are disabled.
+- **The database is not encrypted.** The password protects the app screen, not the database file against developer/root access.
 
-| Permission | Why |
-|---|---|
-| `READ_SMS` | The 30-day backfill. This is the entire data source. |
-| `RECEIVE_SMS` | Picking up new bank messages as they arrive. |
+## UAE bank coverage
 
-`READ_SMS` is a restricted permission on the Play Store. Sideloading is unaffected; public
-distribution would need a declaration.
+The sender rules include **49 bank and banking-brand entries**, expanded using retail-bank names in the [CBUAE August 2026 register](https://centralbank.ae/media/hw0lreyi/cb-register-august-2026.pdf). These aliases are matching rules, not a bank-certified directory of SMS IDs or a guarantee of authenticity.
 
-## Status
+The same classification rules apply across recognised banks and card products. For a missing sender, use **Inbox → Add a missing bank sender**. Bank names and merchant categories live in [`rules.json`](app/src/main/assets/rules.json).
 
-v1.2: dashboard and activity tools (2026-09-26).
+Automated purpose detection currently covers English message patterns. Arabic digits and dirham labels are normalised, but unsupported wording may need review. Universal accuracy across every bank template is not claimed. Tests use synthetic fixtures, not private inbox data.
 
-### Dashboard and navigation
+## Build and test
 
-- Five tabs: Home, Activity, Insights, Cards, and Inbox; dark surfaces with mint,
-  blue, and violet accents.
-- Browse months across the dashboard, charts, card totals, and activity. The
-  initial import/rescan still reads 30 days; older saved history remains visible.
-- Search transactions by merchant, bank, card suffix, type, category, or amount.
-  Combine transaction-type, card, category, currency, all-history, and date-sort
-  filters. Card filters use both bank and suffix, so matching digits across banks
-  do not mix their transactions.
-- Set, edit, or remove a separate AED spending budget for each month. Budgets
-  are stored on the device and use the same expense rules as the dashboard.
-- Insights show six-month spending, category shares, top merchants, spending by
-  day, expense count, and the largest expense. Charts use imported SMS only;
-  months with limited history are not a complete bank statement.
-- Tap a card or category to open its matching activity. Transaction corrections,
-  renaming, and missing-sender registration remain available.
-- Rescan shows a busy state and reports failures. Sample-data loading is no
-  longer exposed in the normal UI, preventing accidental demo transactions.
-
-### What counts as spending
-
-The dashboard totals **purchases, bill payments, and bank fees in AED**. Salary,
-incoming/outgoing transfers, card repayments, cash withdrawals, and refunds have
-separate transaction types and are excluded. Refunds are shown separately, rather
-than deducted from an unrelated month's purchases. Repayment alerts can describe
-both sides of the same payment; neither side is counted as another purchase.
-
-An unexplained debit is **Needs review**, not automatically an expense. Tap an
-activity item to see its original SMS, change its type, or change its merchant
-category. Type corrections apply to that transaction only and survive rescans.
-Declined, pending, future-dated payment notices and OTPs do not count as spending.
-Foreign-currency activity retains its currency and is excluded from AED totals;
-the app does not invent an exchange rate. Multiple transaction amounts in one
-SMS require review.
-
-### UAE coverage and limits
-
-Bank recognition has been expanded using the retail-bank names in the
-[CBUAE August 2026 register](https://centralbank.ae/media/hw0lreyi/cb-register-august-2026.pdf).
-Sender aliases are matching rules, not a bank-certified directory of SMS IDs.
-The same purpose rules apply to every recognised bank and card product. For a
-missing sender, use **Inbox → Missing a bank? Add its SMS sender**. This adds an
-exact sender match and rescans the last 30 days. Sender recognition is not proof
-of SMS authenticity.
-
-Universal accuracy across all bank templates is not claimed. The automated
-purpose rules currently cover English message patterns. Arabic digits and
-dirham currency labels are normalised; unsupported wording with a readable
-amount goes to Inbox. Ambiguous messages with a direction/amount are visible as
-Needs review and excluded from totals. Test fixtures are synthetic, not validated
-samples from every bank. Duplicate detection is still based on the same source
-message, not reconciliation of different SMS alerts describing one purchase.
-
-### Upgrading and checking
-
-The Room v1 → v2 migration is additive. Existing stored SMS are reclassified on
-unlock (including those older than 30 days), and on rescan; this does not reset
-the password or erase card names or merchant rules. Account suffixes no longer
-create cards. Install as an update using the same signing key; do not uninstall
-to resolve a signing mismatch, since uninstalling would remove local history.
+Requires **JDK 17** and **Android SDK 34**. Set `sdk.dir` in a local, untracked `local.properties`. Keep the pinned Kotlin/Android dependency versions together.
 
 ```powershell
 .\gradlew.bat testDebugUnitTest assembleDebug lintDebug
 python tools/check_storage.py
+adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-The Python check runs the migration and production DAO queries against SQLite,
-compares the resulting schema to Room's exported v2 schema, and verifies retained
-data, category/card totals, income separation, currency exclusion, and duplicate
-constraints. It complements JVM tests; on-device upgrade/UI verification is
-still required before distribution.
+Validation includes **43 automated tests** and a SQLite check of the v1 → v2 migration, retained data, spending aggregates, currency exclusions and duplicate constraints. The APK builds successfully; lint reports no errors, with existing dependency/resource warnings.
+
+### Reproduce the screenshots
+
+```powershell
+.\gradlew.bat assembleDemo
+adb install -r app/build/outputs/apk/demo/app-demo.apk
+adb shell am start -n com.meetdheeran.ledger.demo/com.meetdheeran.ledger.demo.DemoActivity
+```
+
+The demo uses a separate application ID and data sandbox, includes only invented transactions, and has **no SMS permissions or SMS receiver**. Its startup activity exists only in the demo source set. The regular APK retains its password and permission flow.
+
+## What's new in 1.2.1
+
+- Added the public APK download and screenshot gallery.
+- Added a separate, reproducible demo build for safe screenshots.
+- Fixed clipped month labels and inconsistent bar alignment in the six-month chart.

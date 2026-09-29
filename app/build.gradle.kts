@@ -24,8 +24,8 @@ android {
         applicationId = "com.meetdheeran.ledger"
         minSdk = 31
         targetSdk = 34
-        versionCode = 3
-        versionName = "1.2.0"
+        versionCode = 4
+        versionName = "1.2.1"
         vectorDrawables.useSupportLibrary = true
     }
 
@@ -41,6 +41,12 @@ android {
     }
 
     buildTypes {
+        create("demo") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".demo"
+            versionNameSuffix = "-demo"
+            matchingFallbacks += "debug"
+        }
         release {
             isMinifyEnabled = false
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")

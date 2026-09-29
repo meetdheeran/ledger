@@ -282,14 +282,16 @@ private fun InsightsScreen(all: List<Txn>, summary: MonthSummary, month: YearMon
                 val max = history.maxOf { it.second }.coerceAtLeast(1L)
                 Row(Modifier.fillMaxWidth().height(155.dp), horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.Bottom) {
                     history.forEach { (m, value) ->
-                        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Bottom) {
+                        Column(Modifier.weight(1f).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(formatMoneyShort(value).removePrefix("AED "), color = Ink.muted, fontSize = 9.sp, maxLines = 1)
                             Spacer(Modifier.height(5.dp))
-                            Box(Modifier.fillMaxWidth().height((110f * value.toFloat() / max).coerceAtLeast(3f).dp)
-                                .clip(RoundedCornerShape(topStart = 7.dp, topEnd = 7.dp))
-                                .background(if (m == month) Ink.accent else Ink.blue.copy(alpha = .45f)))
+                            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
+                                Box(Modifier.fillMaxWidth().fillMaxHeight((value.toFloat() / max).coerceIn(.02f, 1f))
+                                    .clip(RoundedCornerShape(topStart = 7.dp, topEnd = 7.dp))
+                                    .background(if (m == month) Ink.accent else Ink.blue.copy(alpha = .45f)))
+                            }
                             Spacer(Modifier.height(8.dp))
-                            Text(m.format(DateTimeFormatter.ofPattern("MMM")), color = Ink.muted, fontSize = 10.sp)
+                            Text(m.format(DateTimeFormatter.ofPattern("MMM")), color = Ink.muted, fontSize = 10.sp, maxLines = 1)
                         }
                     }
                 }
