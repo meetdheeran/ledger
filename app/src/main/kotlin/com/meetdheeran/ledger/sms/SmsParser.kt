@@ -77,12 +77,12 @@ object SmsParser {
     // - NOON.COM, APPLE.COM/BILL, AMAZON.AE - and cutting at the first dot both
     // mangles the name and loses the category match that depends on it.
     private val MERCHANT_AT = Regex(
-        """\bat\s+([^,;:\n]{2,60}?)(?=\s+(?:on|dated|avl|avbl|available|bal|balance|ref|txn|trx|using|with|card)\b|[,;:\n]|\.(?:\s|\z)|\z)""",
+        """\bat\s+([^,;:\n]{2,60}?)(?=\s+(?:on|dated|avl|avbl|available|bal|balance|ref|txn|trx|using|with|card|via|was|has)\b|[,;:\n]|\.(?:\s|\z)|\z)""",
         RegexOption.IGNORE_CASE
     )
 
     private val MERCHANT_TO = Regex(
-        """\b(?:to|towards)\s+([^,;:\n]{2,60}?)(?=\s+(?:on|dated|avl|avbl|available|bal|balance|ref|txn|trx|using|with|card|from)\b|[,;:\n]|\.(?:\s|\z)|\z)""",
+        """\b(?:to|towards)\s+([^,;:\n]{2,60}?)(?=\s+(?:on|dated|avl|avbl|available|bal|balance|ref|txn|trx|using|with|card|from|via|was|has)\b|[,;:\n]|\.(?:\s|\z)|\z)""",
         RegexOption.IGNORE_CASE
     )
 
@@ -168,7 +168,7 @@ object SmsParser {
     private fun isBalanceContext(body: String, at: Int): Boolean {
         val from = (at - 34).coerceAtLeast(0)
         val prefix = body.substring(from, at).lowercase()
-        return Regex("""\b(?:balance|bal|limit|outstanding|available credit)(?:\s+(?:is|of|amount|credit))?\s*[:=.-]?\s*$""").containsMatchIn(prefix)
+        return Regex("""\b(?:balance|bal|limit|lmt|outstanding|available credit)(?:\s+(?:is|of|amount|credit))?\s*[:=.-]?\s*$""").containsMatchIn(prefix)
     }
 
     private fun cardLast4Of(body: String): String? {

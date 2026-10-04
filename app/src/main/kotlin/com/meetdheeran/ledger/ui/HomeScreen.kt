@@ -384,7 +384,7 @@ private fun InboxScreen(vm: MainViewModel, reviewCount: Int, onReview: () -> Uni
             Text("Keep your numbers accurate", color = Ink.muted, fontSize = 13.sp)
         }
         if (reviewCount > 0) item { Panel(modifier = Modifier.clickable(onClick = onReview)) {
-            Text("$reviewCount transactions need a type", color = Ink.warn, fontWeight = FontWeight.SemiBold)
+            Text(if (reviewCount == 1) "1 transaction needs a type" else "$reviewCount transactions need a type", color = Ink.warn, fontWeight = FontWeight.SemiBold)
             Text("Review now →", color = Ink.accent, modifier = Modifier.padding(top = 8.dp))
         } }
         item {
@@ -408,8 +408,11 @@ private fun InboxScreen(vm: MainViewModel, reviewCount: Int, onReview: () -> Uni
 private fun Metric(label: String, value: String, tint: Color, modifier: Modifier = Modifier) {
     Panel(modifier, padding = 16) {
         Text(label, color = Ink.muted, fontSize = 11.sp)
-        Text(value, color = tint, fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(top = 8.dp), maxLines = 2)
+        // One line, shrinking for big amounts: "AED 18,000.00" used to break after "AED".
+        var size by remember(value) { mutableStateOf(18f) }
+        Text(value, color = tint, fontSize = size.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(top = 8.dp), maxLines = 1, softWrap = false,
+            onTextLayout = { if (it.didOverflowWidth && size > 12f) size -= 1f })
     }
 }
 

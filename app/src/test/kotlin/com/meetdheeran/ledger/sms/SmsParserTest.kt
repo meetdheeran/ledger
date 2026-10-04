@@ -1,6 +1,7 @@
 package com.meetdheeran.ledger.sms
 
 import com.meetdheeran.ledger.data.Direction
+import com.meetdheeran.ledger.data.TransactionKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -174,5 +175,35 @@ class SmsParserTest {
         assertEquals("sender case and surrounding space must not change identity", a, b)
         assertNotNull(c)
         assertTrue("a different timestamp is a different message", a != c)
+    }
+
+    // ---- wording found by probing more bank templates (2026-10-04) -----------
+
+    @Test
+    fun `Lmt is read as the remaining limit, not a second amount`() {
+        val p = txn("AED 75.00 spent on Card ending 1234 at UBER on 03-Oct-26. Avl Lmt AED 4,925.00")
+        assertEquals(TransactionKind.PURCHASE, p.kind)
+        assertEquals(7_500L, p.amountMinor)
+        assertEquals(492_500L, p.balanceMinor)
+        assertEquals(
+            TransactionKind.PURCHASE,
+            txn("AED 75.00 spent on Card ending 1234 at UBER on 03-Oct-26. Avl Cr Lmt AED 4,925.00").kind
+        )
+    }
+
+    @Test
+    fun `merchant stops before via and before a status`() {
+        assertEquals("AHMED", txn("AED 30.00 sent to AHMED via Aani on 03/10/2026. Ref 123456").merchant)
+        assertEquals(
+            "NETFLIX.COM",
+            txn("Transaction of USD 12.99 on card ending 1234 at NETFLIX.COM was successful. Available limit AED 9,000").merchant
+        )
+    }
+
+    @Test
+    fun `known biller debited towards is a bill payment`() {
+        val p = txn("AED 150.00 has been debited from your account XXX1234 towards DEWA on 03-Oct-2026.")
+        assertEquals(TransactionKind.BILL_PAYMENT, p.kind)
+        assertEquals("DEWA", p.merchant)
     }
 }

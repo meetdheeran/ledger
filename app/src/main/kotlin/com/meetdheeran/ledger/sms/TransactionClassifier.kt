@@ -17,7 +17,7 @@ internal object TransactionClassifier {
         // Availability of credit is not incoming money. Ignore the trailing balance clause.
         val semanticBody = if (merchant == null) body else body.replace(
             Regex("""(?i)\bat\s+${Regex.escape(merchant)}"""), "at merchant")
-        val b = semanticBody.lowercase().split(Regex("""\b(?:available|avl|avbl)\s+(?:balance|bal|credit|limit)\b|\boutstanding balance\b"""), limit = 2)[0]
+        val b = semanticBody.lowercase().split(Regex("""\b(?:available|avl|avbl)\s+(?:balance|bal|credit|limit|lmt|cr\.?\s*lmt)\b|\boutstanding balance\b"""), limit = 2)[0]
         val card = b.has("""\b(?:credit\s*card|debit\s*card|card)\b""")
         val debit = b.has("""\b(debited|debit of|spent|purchase|withdrawn|withdrawal|paid|charged|deducted|sent|transferred to|used for|has been used|pos txn|pos transaction)\b""")
         val credit = b.has("""\b(credited|credit of|received|deposited|deposit of|added to|transferred from)\b""")
@@ -66,7 +66,9 @@ internal object TransactionClassifier {
         if (debit && credit && direction == null) return decision(TransactionKind.REVIEW)
         val knownBiller = merchant?.has("""\b(?:DEWA|SEWA|ADDC|AADC|ETISALAT|DU|EMPOWER|TABREED|SALIK|RTA)\b""") == true
         if (!card && merchant != null && (b.has("""\b(?:bill payment|utility payment)\b""") ||
-                (knownBiller && b.has("""\b(?:paid to|payment to|payment towards)\b"""))))
+                (knownBiller && b.has("""\b(?:paid to|payment to|payment towards)\b""")) ||
+                // "AED 150 debited from your account towards DEWA": a known biller is enough.
+                (knownBiller && debit && b.has("""\btowards\b"""))))
             return decision(TransactionKind.BILL_PAYMENT)
         if (b.has("""\b(?:purchase|pos txn|pos transaction|spent)\b""") ||
             (card && debit && merchant != null && b.has("""\bat\b"""))) return decision(TransactionKind.PURCHASE)
