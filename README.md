@@ -2,7 +2,7 @@
 
 **Your money, clearly.** An offline Android spending tracker built around UAE bank SMS.
 
-[**Download Ledger 1.2.1 APK**](https://github.com/meetdheeran/ledger/releases/download/v1.2.1/Ledger-1.2.1.apk) · [Release notes](https://github.com/meetdheeran/ledger/releases/tag/v1.2.1) · [Report an issue](https://github.com/meetdheeran/ledger/issues)
+[**Download the latest APK**](https://github.com/meetdheeran/ledger/releases/latest) · [Releases](https://github.com/meetdheeran/ledger/releases) · [Report an issue](https://github.com/meetdheeran/ledger/issues)
 
 Android 12+ · Kotlin · Jetpack Compose · AED-focused · No internet permission
 
@@ -31,11 +31,19 @@ Actual app screens captured on a OnePlus 7 using the separate **Ledger Demo** bu
     <td><img src="docs/screenshots/insights.png" width="320" alt="Six-month spending chart using fictional demo amounts" /></td>
     <td><img src="docs/screenshots/cards.png" width="320" alt="Card activity overview showing fictional demo cards" /></td>
   </tr>
+  <tr>
+    <th>Inbox & review</th>
+    <th></th>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/inbox.png" width="320" alt="Inbox with one fictional transaction waiting for a type" /></td>
+    <td></td>
+  </tr>
 </table>
 
 ## Install
 
-1. [Download the APK](https://github.com/meetdheeran/ledger/releases/download/v1.2.1/Ledger-1.2.1.apk) on an Android 12 or newer phone.
+1. [Download the latest APK](https://github.com/meetdheeran/ledger/releases/latest) on an Android 12 or newer phone.
 2. Open it and allow installation from your browser or file manager if Android asks.
 3. Open Ledger, set a password and grant SMS access to import your bank messages.
 
@@ -94,7 +102,7 @@ python tools/check_storage.py
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Validation includes **47 automated tests**, a golden-month fixture that locks a full synthetic month from SMS text to dashboard totals (so a rule change cannot silently move the spending figure), and a SQLite check of the v1 → v2 migration, retained data, spending aggregates, currency exclusions and duplicate constraints. The APK builds successfully; lint reports no errors, with existing dependency/resource warnings.
+Validation includes **50 automated tests**, a golden-month fixture that locks a full synthetic month from SMS text to dashboard totals (so a rule change cannot silently move the spending figure), and a SQLite check of the v1 → v2 migration, retained data, spending aggregates, currency exclusions and duplicate constraints. The APK builds successfully; lint reports no errors, with existing dependency/resource warnings.
 
 ### Reproduce the screenshots
 
@@ -105,6 +113,16 @@ adb shell am start -n com.meetdheeran.ledger.demo/com.meetdheeran.ledger.demo.De
 ```
 
 The demo uses a separate application ID and data sandbox, includes only invented transactions, and has **no SMS permissions or SMS receiver**. Its startup activity exists only in the demo source set. The regular APK retains its password and permission flow.
+
+## What's new in 1.2.2
+
+- Reads "Avl Lmt" / "Cr Lmt" as the remaining credit limit, so those purchases count instead of going to review.
+- Merchant names stop before "via" and status words ("NETFLIX.COM was successful" → NETFLIX.COM).
+- A known biller debited "towards DEWA" counts as a bill payment.
+- Income and other summary amounts stay on one line instead of breaking after "AED".
+- "1 transaction needs a type" instead of "1 transactions".
+- The demo build always shows a full month of sample data, however long after install it is opened.
+- New screenshots, including the Inbox.
 
 ## What's new in 1.2.1
 

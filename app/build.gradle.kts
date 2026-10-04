@@ -24,8 +24,8 @@ android {
         applicationId = "com.meetdheeran.ledger"
         minSdk = 31
         targetSdk = 34
-        versionCode = 4
-        versionName = "1.2.1"
+        versionCode = 5
+        versionName = "1.2.2"
         vectorDrawables.useSupportLibrary = true
     }
 

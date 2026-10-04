@@ -18,7 +18,10 @@ import com.meetdheeran.ledger.core.Prefs
 import com.meetdheeran.ledger.data.LedgerDb
 import com.meetdheeran.ledger.sms.SmsImporter
 import com.meetdheeran.ledger.ui.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
 
@@ -30,8 +33,15 @@ class DemoActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         lifecycleScope.launch {
-            val month = YearMonth.now()
-            if (!Prefs.backfillDone(this@DemoActivity)) {
+            // The samples run to the 25th, so anchor them to a month that has
+            // already reached it - otherwise early in a month most would be dated
+            // in the future. Reseed whenever that month moves on; seeding only
+            // once left a demo opened a month later showing nothing at all.
+            val today = LocalDate.now()
+            val month = if (today.dayOfMonth >= 25) YearMonth.now() else YearMonth.now().minusMonths(1)
+            val demoPrefs = getSharedPreferences("demo", MODE_PRIVATE)
+            if (demoPrefs.getString("seeded_month", null) != month.toString()) {
+                withContext(Dispatchers.IO) { LedgerDb.get(this@DemoActivity).clearAllTables() }
                 val messages = mutableListOf<SmsImporter.Message>()
                 fun sample(offset: Long, day: Int, sender: String, body: String) {
                     val date = month.minusMonths(offset).atDay(day)
@@ -61,7 +71,9 @@ class DemoActivity : ComponentActivity() {
                 dao.findCard("ADCB", "1234")?.let { dao.renameCard(it.id, "Everyday card") }
                 dao.findCard("Emirates NBD", "5678")?.let { dao.renameCard(it.id, "Shopping card") }
                 Prefs.setBackfillDone(this@DemoActivity, true)
+                demoPrefs.edit().putString("seeded_month", month.toString()).apply()
             }
+            if (month != YearMonth.now()) vm.changeMonth(-1)
             setContent {
                 LedgerTheme {
                     Column(Modifier.fillMaxSize().background(Ink.bg)) {
